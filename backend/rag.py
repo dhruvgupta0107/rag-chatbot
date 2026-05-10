@@ -1,4 +1,5 @@
 import shutil
+import time
 
 from dotenv import load_dotenv
 import os
@@ -21,13 +22,15 @@ def get_query_embeddings():
         task_type="retrieval_query"
     )
 
+
 def ingest_pdf(pdf_path: str):
     doc = fitz.open(pdf_path)
-    if os.path.exists("./chroma_db"):
-        shutil.rmtree("./chroma_db")
     text = ""
     for page in doc:
         text += page.get_text()
+
+    if not text.strip():
+        raise ValueError("No text found in PDF.")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000,
@@ -35,11 +38,32 @@ def ingest_pdf(pdf_path: str):
     )
     chunks = splitter.create_documents([text])
 
-    vectorstore = Chroma.from_documents(
-        chunks,
-        get_embeddings(),
-        persist_directory="./chroma_db"
-    )
+    if not chunks:
+        raise ValueError("Could not split document into chunks.")
+
+    # Clear old data
+    if os.path.exists("./chroma_db"):
+        shutil.rmtree("./chroma_db")
+
+    # Embed in batches of 5 chunks with delay
+    batch_size = 5
+    vectorstore = None
+
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        if vectorstore is None:
+            vectorstore = Chroma.from_documents(
+                batch,
+                get_embeddings(),
+                persist_directory="./chroma_db"
+            )
+        else:
+            vectorstore.add_documents(batch)
+        
+        # Wait between batches to avoid rate limit
+        if i + batch_size < len(chunks):
+            time.sleep(3)
+
     return vectorstore
 
 def answer_question(question: str):

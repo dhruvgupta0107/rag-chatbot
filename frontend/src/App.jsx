@@ -29,6 +29,7 @@ export default function App() {
 
     try {
       const res = await fetch(`${API}/upload`, { method: "POST", body: form });
+      const data = await res.json();
       if (res.ok) {
         setUploadSuccess(true);
         setMessages([{
@@ -36,10 +37,10 @@ export default function App() {
           text: `📄 "${file.name}" uploaded and indexed. Ask me anything about it!`
         }]);
       } else {
-        setMessages([{ role: "assistant", text: "Upload failed. Please try again." }]);
+        setMessages([{ role: "assistant", text: `❌ Upload failed: ${data.detail || JSON.stringify(data)}` }]);
       }
-    } catch {
-      setMessages([{ role: "assistant", text: "Could not connect to backend." }]);
+    } catch (err) {
+      setMessages([{ role: "assistant", text: `❌ Could not connect to backend. Is it running?` }]);
     } finally {
       setUploading(false);
     }
@@ -59,11 +60,13 @@ export default function App() {
         body: JSON.stringify({ question: q }),
       });
       const data = await res.json();
-      console.log("FULL RESPONSE:", data);        // ADD THIS
-      console.log("RESULT FIELD:", data.result);  // 
+      if (res.ok) {
         setMessages(prev => [...prev, { role: "assistant", text: data.answer?.result || data.answer }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", text: "Error getting response." }]);
+      } else {
+        setMessages(prev => [...prev, { role: "assistant", text: `❌ Error: ${data.detail || JSON.stringify(data)}` }]);
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: "assistant", text: `❌ Could not connect to backend.` }]);
     } finally {
       setAsking(false);
     }
